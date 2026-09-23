@@ -4,6 +4,9 @@ import json
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
+from career_agent import CareerAgent, TOOL_DESCRIPTIONS
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -37,6 +40,19 @@ class APITests(unittest.TestCase):
         self.assertEqual(self.request('/api/profile?id=E0001')[0],403)
         self.assertEqual(self.request('/api/import',{'employees':[]})[0],403)
         self.assertEqual(self.login('hr')[0],200);self.assertEqual(self.request('/api/hr')[0],200)
+    def test_agent_endpoint_fallback_and_access(self):
+        self.assertEqual(self.request('/api/agent/recommend',{'employee_id':'E0028'})[0],403)
+        self.login()
+        self.assertEqual(self.request('/api/agent/recommend',{'employee_id':'E0028'})[0],403)
+        with patch.dict('os.environ',{'OPENAI_API_KEY':''}):
+            status,result=self.request('/api/agent/recommend',{'employee_id':'E0002','hours':8})
+        self.assertEqual(status,200);self.assertEqual(result['mode'],'fallback')
+        self.assertEqual(result['tools_used'],[])
+        self.assertEqual(result['recommendations'],server.engine().profile('E0002',8)['recommendations'])
+        self.assertEqual(self.request('/api/agent/recommend',{})[0],400)
+        self.login('hr')
+        self.assertEqual(self.request('/api/agent/recommend',{'employee_id':'UNKNOWN'})[0],400)
+
     def test_complete_and_duplicate(self):
         self.login();_,p=self.request('/api/profile');c=p['recommendations'][0]
         self.assertEqual(self.request('/api/complete',{'event_id':c['event_id']})[0],200)
@@ -52,6 +68,64 @@ class APITests(unittest.TestCase):
         self.assertEqual(self.request('/api/import',{'employees':[e]})[0],400)
         self.assertEqual(server.DATA,before)
         self.assertEqual(self.request('/api/import',{'history':'employee_id,event_id\nE0002,EV_036\n'})[0],400)
+
+    def test_judge_sample_import_profile_agent_and_complete(self):
+        directory=Path(__file__).parent/'judge_sample'
+        employees=json.loads((directory/'employees.json').read_text())
+        history=(directory/'activity_history.csv').read_text()
+        eid=employees['employees'][0]['employee_id']
+        # Run from a clean working state even if the sample was imported locally.
+        server.DATA['employees']=[e for e in server.DATA['employees'] if e['employee_id']!=eid]
+        server.DATA['history']=[r for r in server.DATA['history'] if r['employee_id']!=eid]
+        self.login('hr')
+        self.assertEqual(self.request('/api/profile?id='+eid)[0],400)
+        status,result=self.request('/api/import',{'employees':employees,'history':history})
+        self.assertEqual(status,200);self.assertEqual(result['employee_ids'],[eid])
+        _,available=self.request('/api/demo')
+        self.assertIn(eid,[e['employee_id'] for e in available['employees']])
+        status,p=self.request('/api/profile?id='+eid)
+        self.assertEqual(status,200)
+        self.assertEqual(p,server.engine().profile(eid))
+        self.assertEqual(p['employee']['grade'],'Middle');self.assertEqual(p['next_grade'],'Senior')
+        self.assertTrue(any(g['gap']>0 for g in p['gaps']))
+        self.assertGreaterEqual(len(p['recommendations']),1);self.assertLessEqual(len(p['recommendations']),3)
+        self.assertIsInstance(p['readiness'],(int,float))
+        self.assertEqual({r['status'] for r in p['history']},{'completed','no_show','declined'})
+        club=next(c for c in p['recommendations'] if c['event_id']=='EV_036')
+        self.assertEqual(club['history_counts']['no_show'],1)
+        self.assertEqual(club['history_counts']['declined'],1)
+        calls=[]
+        def create(**kwargs):
+            calls.append(kwargs)
+            if len(calls)==1:
+                return SimpleNamespace(output=[SimpleNamespace(type='function_call',name=name,
+                    arguments=json.dumps({'employee_id':eid}),call_id=name) for name in TOOL_DESCRIPTIONS],output_text='')
+            c=p['recommendations'][0]
+            skill=next(x for x in c['changes'] if x['required']>x['before'])
+            return SimpleNamespace(output=[],output_text=json.dumps({'event_id':c['event_id'],
+                'skill_id':skill['skill_id'],'alternative_event_id':p['recommendations'][1]['event_id'],
+                'reason_indices':[1,2,0,3]}))
+        client=SimpleNamespace(responses=SimpleNamespace(create=create))
+        original_recommend=CareerAgent.recommend
+        with patch.object(CareerAgent,'recommend',lambda agent,employee_id: original_recommend(agent,employee_id,client)):
+            status,agent=self.request('/api/agent/recommend',{'employee_id':eid})
+        self.assertEqual(status,200);self.assertEqual(agent['mode'],'openai')
+        self.assertEqual(set(agent['tools_used']),set(TOOL_DESCRIPTIONS))
+        outputs=[x for x in calls[1]['input'] if isinstance(x,dict) and x.get('type')=='function_call_output']
+        self.assertEqual(len(outputs),4)
+        self.assertEqual(agent['recommendations'],p['recommendations'])
+        with patch.dict('os.environ',{'OPENAI_API_KEY':''}):
+            status,fallback=self.request('/api/agent/recommend',{'employee_id':eid})
+        self.assertEqual(status,200);self.assertEqual(fallback['recommendations'],p['recommendations'])
+        chosen=p['recommendations'][0]
+        status,_=self.request('/api/complete',{'employee_id':eid,'event_id':chosen['event_id']})
+        self.assertEqual(status,200)
+        _,after=self.request('/api/profile?id='+eid)
+        self.assertEqual(after['readiness'],chosen['readiness_after'])
+        self.assertEqual(after['completed_count'],p['completed_count']+1)
+        self.assertEqual(self.request('/api/login',{'role':'employee','employee_id':eid})[0],200)
+        status,own=self.request('/api/profile')
+        self.assertEqual(status,200);self.assertEqual(own['employee']['employee_id'],eid)
 
     def test_import_single_minimal_profile(self):
         self.login('hr')

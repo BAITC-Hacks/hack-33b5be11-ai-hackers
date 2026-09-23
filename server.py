@@ -1,4 +1,4 @@
-"""Local hackathon server. Python 3.9+, no third-party dependencies."""
+"""Local hackathon server. Python 3.9+, optional OpenAI career agent."""
 import csv
 import copy
 import io
@@ -11,6 +11,7 @@ from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from engine import Engine, GRADES
+from career_agent import CareerAgent
 
 ROOT = Path(__file__).resolve().parent
 LOCK = threading.RLock()
@@ -158,6 +159,17 @@ class Handler(BaseHTTPRequestHandler):
                 token=secrets.token_urlsafe(32); SESSIONS[token]=s
                 return self.send(s,cookie=f'cq_session={token}; HttpOnly; SameSite=Strict; Path=/')
             s=self.session()
+            if self.path=='/api/agent/recommend':
+                eid=payload.get('employee_id')
+                if not isinstance(eid,str) or not eid: raise ValueError('Нужен employee_id')
+                if s['role']!='hr' and eid!=s['employee_id']: raise PermissionError('Доступ только к своему профилю')
+                hours=float(payload.get('hours',80))
+                if not 1<=hours<=1000: raise ValueError('Бюджет от 1 до 1000 часов')
+                with LOCK:
+                    if eid not in engine().employees: raise ValueError('Неизвестный employee_id')
+                    snapshot=Engine(copy.deepcopy(DATA['employees']), EVENTS, SKILLS, copy.deepcopy(DATA['history']), TODAY)
+                # Network calls must not hold the global state lock.
+                return self.send(CareerAgent(snapshot,hours).recommend(eid))
             with LOCK:
                 if self.path=='/api/complete':
                     eid=payload.get('employee_id',s.get('employee_id'))

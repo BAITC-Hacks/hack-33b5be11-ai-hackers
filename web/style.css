@@ -32,3 +32,5 @@ html:has(dialog[open]){overflow:hidden}
  #toast{left:16px;right:16px;width:auto}.table-scroll{max-height:420px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+.agent-panel{margin-top:26px}.agent-panel .section-head{margin-top:0;flex-wrap:wrap}.agent-panel li{margin:8px 0}.agent-panel code{font-size:12px;overflow-wrap:anywhere}.agent-facts{display:flex;gap:32px;flex-wrap:wrap}.agent-panel details{color:var(--green)}

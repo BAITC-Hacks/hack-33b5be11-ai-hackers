@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "dataset": "Career Quest",
+    "version": "1.0",
+    "as_of_date": "2026-10-01"
+  },
+  "employees": [
+    {
+      "employee_id": "JUDGE_SAMPLE_001",
+      "full_name": "Judge Sample Employee",
+      "department": "Backend Development",
+      "role": "Backend Engineer",
+      "grade": "Middle",
+      "manager_id": "E0175",
+      "hire_date": "2023-04-25",
+      "tenure_months": 41,
+      "work_format": "remote",
+      "preferred_language": "ru",
+      "career_goal": {
+        "target_role": "Backend Engineer",
+        "target_grade": "Senior"
+      },
+      "skills": {
+        "SK_PYTHON": 3,
+        "SK_SQL": 3,
+        "SK_API_DESIGN": 1,
+        "SK_SYSTEM_DESIGN": 1,
+        "SK_CLOUD": 2,
+        "SK_CONTAINERS": 1,
+        "SK_CICD": 2,
+        "SK_APP_SECURITY": 2,
+        "SK_OBSERVABILITY": 2,
+        "SK_API_TESTING": 1,
+        "SK_PROSPECTING": 1,
+        "SK_COMMUNICATION": 2,
+        "SK_PUBLIC_SPEAKING": 1,
+        "SK_WRITTEN_COMMUNICATION": 1,
+        "SK_STAKEHOLDER_MGMT": 1,
+        "SK_LEADERSHIP": 1,
+        "SK_MENTORING": 1,
+        "SK_FEEDBACK": 2,
+        "SK_CONFLICT_RESOLUTION": 3,
+        "SK_TEAMWORK": 3,
+        "SK_EMOTIONAL_INTELLIGENCE": 2,
+        "SK_PROBLEM_SOLVING": 4,
+        "SK_CRITICAL_THINKING": 3,
+        "SK_TIME_MANAGEMENT": 3,
+        "SK_ADAPTABILITY": 1
+      },
+      "last_review_date": "2026-07-23"
+    }
+  ]
+}
