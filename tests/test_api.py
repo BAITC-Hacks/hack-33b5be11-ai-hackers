@@ -48,6 +48,16 @@ class APITests(unittest.TestCase):
         self.assertEqual(self.request('/api/profile?id=E0001')[0],403)
         self.assertEqual(self.request('/api/import',{'employees':[]})[0],403)
         self.assertEqual(self.login('hr')[0],200);self.assertEqual(self.request('/api/hr')[0],200)
+    def test_https_cookie_configuration(self):
+        payload={'role':'employee','employee_id':'E0002'}
+        for secure in ('0','1'):
+            with self.subTest(secure=secure), patch.dict('os.environ',{'COOKIE_SECURE':secure}):
+                req=urllib.request.Request(self.url+'/api/login',data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
+                with urllib.request.urlopen(req) as response:
+                    cookie=response.headers['Set-Cookie']
+                self.assertEqual('; Secure' in cookie,secure=='1')
+                self.assertIn('HttpOnly',cookie)
+                self.assertIn('SameSite=Strict',cookie)
     def test_agent_endpoint_fallback_and_access(self):
         self.assertEqual(self.request('/api/agent/recommend',{'employee_id':'E0028'})[0],403)
         self.login()

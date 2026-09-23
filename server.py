@@ -161,7 +161,8 @@ class Handler(BaseHTTPRequestHandler):
                 elif role=='employee' and payload.get('employee_id') in engine().employees: s={'role':'employee','employee_id':payload['employee_id']}
                 else: raise ValueError('Неизвестный пользователь')
                 token=secrets.token_urlsafe(32); SESSIONS[token]=s
-                return self.send(s,cookie=f'cq_session={token}; HttpOnly; SameSite=Strict; Path=/')
+                secure='; Secure' if os.environ.get('COOKIE_SECURE')=='1' else ''
+                return self.send(s,cookie=f'cq_session={token}; HttpOnly; SameSite=Strict; Path=/{secure}')
             s=self.session()
             if self.path=='/api/agent/recommend':
                 eid=payload.get('employee_id')
@@ -204,5 +205,6 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__=='__main__':
     port=int(os.environ.get('PORT','8000'))
-    print(f'Career Quest: http://127.0.0.1:{port} | Локальное демо | HR: пароль в README',flush=True)
-    ThreadingHTTPServer(('127.0.0.1',port),Handler).serve_forever()
+    bind_address=os.environ.get('BIND_ADDRESS','127.0.0.1')
+    print(f'Career Quest listening on {bind_address}:{port}',flush=True)
+    ThreadingHTTPServer((bind_address,port),Handler).serve_forever()

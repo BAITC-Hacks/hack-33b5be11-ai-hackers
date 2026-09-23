@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: career-quest-hackalem
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-web.txt
+    startCommand: python -B server.py
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: BIND_ADDRESS
+        value: 0.0.0.0
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: HR_PASSWORD
+        sync: false

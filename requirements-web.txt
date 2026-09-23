@@ -1,0 +1,2 @@
+# Only the supported web app; Streamlit is not needed for hosting.
+openai==2.48.0
