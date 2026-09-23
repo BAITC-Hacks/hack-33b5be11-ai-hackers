@@ -2,6 +2,8 @@ import copy
 import json
 import os
 import unittest
+import time
+import threading
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -44,6 +46,27 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(r['recommended_activity_id'],c['event_id'])
         self.assertIn(r['expected_gain'],[x['gain'] for x in c['changes']])
         self.assertEqual(before,server.DATA)
+
+    def test_hard_deadline_even_if_provider_ignores_timeout(self):
+        release=threading.Event();exited=threading.Event()
+        def slow(**kwargs):
+            try:
+                release.wait(2)
+                raise TimeoutError()
+            finally: exited.set()
+        client=SimpleNamespace(responses=SimpleNamespace(create=slow))
+        try:
+            with patch('career_agent.AI_BUDGET_SECONDS',0.05):
+                started=time.monotonic();r=self.agent.recommend(self.eid,client)
+            self.assertLess(time.monotonic()-started,0.5)
+            self.assertEqual(r['fallback_reason'],'deadline_exceeded')
+        finally:
+            release.set();exited.wait(2)
+
+    def test_saturation_returns_immediate_fallback(self):
+        with patch('career_agent.AI_WORKERS', threading.BoundedSemaphore(0)):
+            r=self.agent.recommend(self.eid,self.fake_client())
+        self.assertEqual(r['fallback_reason'],'busy')
 
     def test_no_key(self):
         with patch.dict(os.environ,{'OPENAI_API_KEY':''}):

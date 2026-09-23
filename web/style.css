@@ -34,3 +34,15 @@ html:has(dialog[open]){overflow:hidden}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 
 .agent-panel{margin-top:26px}.agent-panel .section-head{margin-top:0;flex-wrap:wrap}.agent-panel li{margin:8px 0}.agent-panel code{font-size:12px;overflow-wrap:anywhere}.agent-facts{display:flex;gap:32px;flex-wrap:wrap}.agent-panel details{color:var(--green)}
+
+.preview-table{overflow-x:auto;margin:16px 0}.preview-table table{min-width:490px}#simulation .preview-table th:first-child{width:32%}
+
+@media(max-width:600px){
+ #simulation .preview-table table{min-width:0;display:block}
+ #simulation .preview-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ #simulation .preview-table tbody{display:block}
+ #simulation .preview-table tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-bottom:12px;padding:12px;background:#f2f5ee;border-radius:10px}
+ #simulation .preview-table td{display:flex;justify-content:space-between;gap:8px;padding:4px;border:0;text-align:left;font-weight:600}
+ #simulation .preview-table td:first-child{grid-column:1/-1;font-size:13px}
+ #simulation .preview-table td:before{content:attr(data-label);font-weight:400;color:var(--muted);font-size:11px}
+}

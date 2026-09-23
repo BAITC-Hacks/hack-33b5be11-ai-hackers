@@ -51,9 +51,11 @@ class Engine:
             return result
         seen = set()
         for r in self.records(employee['employee_id']):
-            if r['status'] == 'completed' and r['date'] > review and r['event_id'] in self.events:
+            if r['status'] == 'completed' and r['event_id'] in self.events:
                 if r['event_id'] in seen and r['event_id'] != 'EV_036': continue
-                result = self.apply(result, self.events[r['event_id']]); seen.add(r['event_id'])
+                seen.add(r['event_id'])
+                if r['date'] > review:
+                    result = self.apply(result, self.events[r['event_id']])
         return result
 
     @staticmethod

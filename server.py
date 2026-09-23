@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent
 LOCK = threading.RLock()
 SESSIONS = {}
 STATE = ROOT / 'var/state.json'
+BUILD_ID = __import__('hashlib').sha256(b''.join((ROOT / name).read_bytes() for name in ('server.py','engine.py','career_agent.py','web/app.js'))).hexdigest()[:10]
 
 def read(name): return json.loads((ROOT / 'data' / name).read_text())
 
@@ -46,7 +47,7 @@ def validate_import(payload):
         employees = raw_employees
     history = payload.get('history', [])
     if isinstance(history, str):
-        reader=csv.DictReader(io.StringIO(history),strict=True); headers=reader.fieldnames or []
+        reader=csv.DictReader(io.StringIO(history.lstrip("\ufeff")),strict=True); headers=reader.fieldnames or []
         required={'record_id','employee_id','event_id','date','status'}
         if len(headers)!=len(set(headers)) or not required.issubset(headers):
             raise ValueError('История CSV: нужны уникальные record_id, employee_id, event_id, date, status')
@@ -125,6 +126,9 @@ class Handler(BaseHTTPRequestHandler):
                 if url.path not in paths: return self.send({'error':'Не найдено'},404)
                 file=ROOT/'web'/paths[url.path]
                 return self.send(file.read_bytes(),content_type={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'}[file.suffix])
+            if url.path=='/api/health':
+                import importlib.util
+                return self.send({'status':'ok','build':BUILD_ID,'ai_configured':bool(os.environ.get('OPENAI_API_KEY')),'ai_sdk_installed':importlib.util.find_spec('openai') is not None})
             if url.path=='/api/demo': return self.send({'employees':[{'employee_id':e['employee_id'],'full_name':e['full_name'],'role':e['role']} for e in DATA['employees']], 'demo':True})
             s=self.session()
             with LOCK:

@@ -2,6 +2,11 @@
 import json
 import os
 import time
+import queue
+import threading
+
+AI_BUDGET_SECONDS = 8.0
+AI_WORKERS = threading.BoundedSemaphore(4)
 from collections import Counter
 
 TOOL_DESCRIPTIONS = {
@@ -33,7 +38,7 @@ career goal from the next grade of the current role. Analyze the evidence intern
 Return only a decision JSON: event_id from top 3, skill_id from that event's changes with
 required > before, alternative_event_id from another top-3 event (null if none), and
 reason_indices: unique zero-based indices of that event's explanation entries, most
-relevant first. Include gap and history evidence. These evidence references are rendered
+relevant first. Always include indices 0, 1 and 2 (grade, gap and history evidence). These evidence references are rendered
 verbatim by the server to prevent fabricated factual explanations. If no activities are
 available use null IDs and reason_indices [0]. Do not output chain-of-thought."""
 
@@ -83,6 +88,8 @@ class CareerAgent:
         indices = decision['reason_indices']
         if not isinstance(indices, list) or not indices or any(type(i) is not int or not 0 <= i < 4 for i in indices):
             raise ValueError('Invalid evidence references')
+        if selected and not {0, 1, 2}.issubset(indices):
+            raise ValueError('Grade, gap and history evidence are required')
         reasons = [selected['explanation'][i] for i in dict.fromkeys(indices)] if selected else [evidence['no_step_reason']]
         return {'employee_id': self.employee_id, 'mode': mode, 'fallback_reason': fallback_reason,
                 'recommended_activity': selected['title'] if selected else None,
@@ -98,6 +105,36 @@ class CareerAgent:
                 'score_formula': evidence['score_formula'], 'tools_used': list(tools_used)}
 
     def recommend(self, employee_id, client=None):
+        """Bound user-visible waiting even when a provider ignores its timeout.
+
+        Workers are read-only, daemonized and globally capped. Timed-out work
+        retains its slot until it actually exits, preventing unbounded threads.
+        """
+        if employee_id not in self.engine.employees:
+            raise ValueError('Неизвестный employee_id')
+        self.employee_id = employee_id
+        if client is None and not os.environ.get('OPENAI_API_KEY'):
+            return self._fallback(employee_id, 'missing_api_key')
+        if not AI_WORKERS.acquire(blocking=False):
+            return self._fallback(employee_id, 'busy')
+        results = queue.Queue(maxsize=1)
+        worker_agent = CareerAgent(self.engine, self.hours)
+        deadline = time.monotonic() + AI_BUDGET_SECONDS
+        def work():
+            try:
+                results.put(worker_agent._recommend(employee_id, client, deadline))
+            except Exception:
+                results.put(None)
+            finally:
+                AI_WORKERS.release()
+        threading.Thread(target=work, daemon=True, name='career-ai').start()
+        try:
+            result = results.get(timeout=max(0, deadline-time.monotonic()))
+            return result if result is not None else self._fallback(employee_id, 'agent_unavailable')
+        except queue.Empty:
+            return self._fallback(employee_id, 'deadline_exceeded')
+
+    def _recommend(self, employee_id, client=None, deadline=None):
         if employee_id not in self.engine.employees:
             raise ValueError('Неизвестный employee_id')
         self.employee_id = employee_id
@@ -109,10 +146,10 @@ class CareerAgent:
                     raise RuntimeError('Missing configuration')
                 failure = 'api_unavailable'
                 from openai import OpenAI
-                client = OpenAI(api_key=os.environ['OPENAI_API_KEY'], max_retries=0, timeout=20)
+                client = OpenAI(api_key=os.environ['OPENAI_API_KEY'], max_retries=0, timeout=AI_BUDGET_SECONDS)
             failure = 'agent_unavailable'
             conversation = [{'role': 'user', 'content': f'Find my best next career step. employee_id: {employee_id}'}]
-            deadline = time.monotonic() + 55
+            deadline = deadline or time.monotonic() + AI_BUDGET_SECONDS
             for _ in range(6):
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -122,7 +159,7 @@ class CareerAgent:
                     instructions=INSTRUCTIONS, input=conversation, tools=TOOLS, tool_choice='auto',
                     text={'format': {'type': 'json_schema', 'name': 'career_decision',
                                      'schema': DECISION_SCHEMA, 'strict': True}},
-                    store=False, max_output_tokens=1800, timeout=min(20, remaining))
+                    store=False, max_output_tokens=1800, timeout=remaining)
                 conversation.extend(response.output)
                 calls = [item for item in response.output if item.type == 'function_call']
                 if not calls:
@@ -146,6 +183,10 @@ class CareerAgent:
         except Exception:
             # Never expose SDK exceptions, headers, credentials or model text.
             pass
+        return self._fallback(employee_id, failure, used)
+
+    def _fallback(self, employee_id, failure, used=()):
+        self.employee_id = employee_id
         evidence = self.get_recommendations(employee_id)
         activities = evidence['activities']
         first = activities[0] if activities else None

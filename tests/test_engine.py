@@ -20,9 +20,14 @@ class CareerTests(unittest.TestCase):
         self.assertEqual(Engine.apply({'A':2},event)['A'],3)
     def test_only_post_review_history_is_applied_once(self):
         e=copy.deepcopy(self.employees[0]);e['skills']={'SK_SYSTEM_DESIGN':0};e['last_review_date']='2026-09-01'
-        history=[{'record_id':str(i),'employee_id':e['employee_id'],'event_id':'EV_005','date':d,'status':'completed'} for i,d in enumerate(['2026-08-01','2026-09-02','2026-09-03'])]
+        history=[{'record_id':str(i),'employee_id':e['employee_id'],'event_id':'EV_005','date':d,'status':'completed'} for i,d in enumerate(['2026-09-02','2026-09-03'])]
         eng=Engine([e],self.events,self.skills,history)
         self.assertEqual(eng.levels(e)['SK_SYSTEM_DESIGN'],1)
+    def test_duplicate_completion_across_review_does_not_grant_again(self):
+        e=copy.deepcopy(self.employees[1]);e['last_review_date']='2026-09-01';e['skills']['SK_SYSTEM_DESIGN']=2
+        history=[{'record_id':str(i),'employee_id':e['employee_id'],'event_id':'EV_005','date':d,'status':'completed'} for i,d in enumerate(['2026-08-01','2026-09-20'])]
+        self.assertEqual(Engine([e],self.events,self.skills,history).levels(e)['SK_SYSTEM_DESIGN'],2)
+
     def test_all_profiles_follow_constraints(self):
         started=time.perf_counter()
         for e in self.employees:

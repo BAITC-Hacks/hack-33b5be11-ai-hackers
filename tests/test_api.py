@@ -34,6 +34,14 @@ class APITests(unittest.TestCase):
         except urllib.error.HTTPError as e:return e.code,json.load(e)
     def login(self,role='employee'):
         return self.request('/api/login',{'role':role,'employee_id':'E0002','password':'hackalem-demo'})
+    def test_health_and_bom_history(self):
+        status,health=self.request('/api/health')
+        self.assertEqual(status,200);self.assertEqual(len(health['build']),10)
+        self.assertNotIn('api_key',health)
+        self.login('hr')
+        status,result=self.request('/api/import',{'history':'\ufeffrecord_id,employee_id,event_id,date,status\nBOM_QA,E0002,EV_036,2026-09-01,no_show\n'})
+        self.assertEqual(status,200);self.assertEqual(result['history'],1)
+
     def test_role_separation(self):
         self.assertEqual(self.request('/api/hr')[0],403);self.login()
         self.assertEqual(self.request('/api/hr')[0],403)

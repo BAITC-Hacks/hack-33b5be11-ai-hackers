@@ -1,4 +1,4 @@
-"""Career Quest MVP. All demo changes live in Streamlit session_state."""
+"""EXPERIMENTAL historical Streamlit prototype; submit server.py instead. All demo changes live in Streamlit session_state."""
 
 import copy
 from uuid import uuid4
@@ -290,6 +290,7 @@ def main():
     st.caption("Развитие сотрудников · Дата среза: {} · Демо без внешних API".format(dataset["as_of_date"]))
     for warning in dataset["warnings"]:
         st.warning(warning)
+    st.warning("Экспериментальный прототип. Сдаваемая версия: python3 -B server.py → http://127.0.0.1:8000. Этот интерфейс использует отдельную историческую модель.")
     employee_tab, hr_tab = st.tabs(["Employee", "HR Dashboard"])
     with employee_tab:
         render_employee(dataset)
